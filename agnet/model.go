@@ -65,6 +65,7 @@ func (a *Agent) Execute(input string) (string, error) {
 		return "", errors.New("请先初始化系统提示语")
 	}
 
+	// todo 独立函数实现
 	// 工作流执行（顺序执行）
 	// 上一个智能体输出结果为当前智能体的输入
 	if a.AgentType == AgentTypeSequential {
@@ -88,6 +89,7 @@ func (a *Agent) Execute(input string) (string, error) {
 		return currentOutput, nil
 	}
 
+	// todo 独立函数实现
 	// 并发执行
 	// 所有子智能体并发执行，最后父智能体汇总执行
 	if a.AgentType == AgentTypeParallel {
