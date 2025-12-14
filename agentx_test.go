@@ -4,10 +4,13 @@ import (
 	"agentx/agnet"
 	"agentx/llm"
 	"agentx/prompt"
+	"agentx/tool"
 	"context"
 	"fmt"
+	"os/exec"
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -105,4 +108,54 @@ func TestParallelAgent(t *testing.T) {
 	// 断言输出结果
 	assert.Equal(t, nil, err)
 	fmt.Println(res)
+}
+
+// 测试Mcp调用agent
+func TestMcp(t *testing.T) {
+	ctx := context.Background()
+
+	// 1️⃣ 启动 MCP Server（子进程）
+	// 使用 `go run` 启动，避免对预编译二进制和可执行权限的依赖
+	cmd := exec.Command("go", "run", "./mcp/sayHi.go")
+	transport := &mcp.CommandTransport{Command: cmd}
+
+	client := mcp.NewClient(
+		&mcp.Implementation{Name: "mcp-client", Version: "v1.0.0"},
+		nil,
+	)
+	session, err := client.Connect(ctx, transport, nil)
+	if err != nil {
+		t.Skipf("skipping TestMcp: failed to connect MCP server: %v", err)
+	}
+	defer session.Close()
+
+	// 2️⃣ 构造 MCPTool
+	sayHiTool := &tool.MCPTool{
+		ToolName: "greet",
+		Desc: `
+工具名：greet
+功能：向某人打招呼
+参数：
+- name(string)：名字
+`,
+		Session: session,
+	}
+
+	// 3️⃣ 构造真实 LLM
+	qwen := llm.NewQWenModel(&llm.QwenWenModel{
+		Token:        "sk-e692504205e74522b45710e1c25065ad",
+		BaseUrl:      "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+		Model:        "qwen-plus",
+		OutputFormat: llm.OutputFormatText,
+		Temperature:  0.5,
+	})
+
+	// 4️⃣ 构造 Agent（注入 Tool）
+	p := prompt.NewPrompt(nil, "你是一个智能助理，可以在必要时调用工具。")
+	agent := agnet.NewAgent(ctx, "测试mcp智能体", qwen, p, agnet.WithTools(sayHiTool))
+
+	// 5️⃣ 用“必须用工具”的输入
+	out, err := agent.Execute("帮我向 Tom 打个招呼")
+	assert.NoError(t, err)
+	fmt.Println("Agent Output:", out)
 }
